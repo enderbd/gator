@@ -11,7 +11,7 @@ import (
 
 func handleFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.args) < 1 {
-		return fmt.Errorf("Missing argument, usage : %s <url> ", cmd.name)
+		return fmt.Errorf("Missing argument, usage : %s <feed_url> ", cmd.name)
 	}
 	feed, err := s.db.GetFeedByUrl(context.Background(), cmd.args[0])
 	if err != nil {
@@ -46,5 +46,25 @@ func handleFollowing(s *state, _ command, user database.User) error {
 		fmt.Printf("* %s\n", feed_follow.FeedName)
 	}
 
+	return nil
+}
+
+func handleUnfollow(s  *state, cmd command, user database.User) error {
+	if len(cmd.args) < 1 {
+		return fmt.Errorf("Missing argument, usage : %s <feed_url> ", cmd.name)
+	}
+	feed, err := s.db.GetFeedByUrl(context.Background(), cmd.args[0])
+	if err != nil {
+		return fmt.Errorf("Could not find feed with url %s to unfollow: error %w", cmd.args[0], err)
+	}
+
+	if err := s.db.DeleteFeedFollowByUserFeedIds(context.Background(), database.DeleteFeedFollowByUserFeedIdsParams{
+		UserID: user.ID,
+		FeedID: feed.ID,
+	}); err != nil {
+		return fmt.Errorf("Unable to delete feed with url %s from feed_follows: error %w", cmd.args[0], err)
+	}
+
+	fmt.Printf("Followed feed removed!")
 	return nil
 }
