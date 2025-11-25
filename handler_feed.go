@@ -22,17 +22,11 @@ func handleAgg(s *state, _ command) error {
 }
 
 
-func handleAddFeed(s *state, cmd command) error {
+func handleAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.args) < 2 {
 		return fmt.Errorf("missing argument(s), usage: %s <feed_name> <feed_url>", cmd.name)
 	}
 
-	currentUser := s.cfg.CurrentUserName
-	userInfo, err := s.db.GetUser(context.Background(), currentUser)
-	if err != nil {
-		return fmt.Errorf("Could not find current user %v in the database: %+w ", currentUser, err)
-	}
-	userId := userInfo.ID
 	
 	feed, err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
 		ID: uuid.New(),
@@ -40,7 +34,7 @@ func handleAddFeed(s *state, cmd command) error {
 		UpdatedAt: time.Now(),	
 		Name: cmd.args[0],
 		Url: cmd.args[1],
-		UserID: userId,
+		UserID: user.ID,
 	})
 
 	if err != nil {
@@ -54,7 +48,7 @@ func handleAddFeed(s *state, cmd command) error {
 		ID: uuid.New(),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-		UserID: userInfo.ID,
+		UserID: user.ID,
 		FeedID: feed.ID,
 	})
 	if err != nil {
