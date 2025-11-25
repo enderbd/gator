@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/enderbd/gator/internal/database"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 
@@ -100,24 +103,68 @@ func printFeed(feed database.Feed) {
 func scrapeFeeds(s *state) {
 	feed, err := s.db.GetNextFeedToFetch(context.Background())	
 	if err != nil{
-		fmt.Printf("Error trying to fetch next feed: %v\n", err)
+		log.Printf("Error trying to fetch next feed: %v\n", err)
 		return
 	}
 	
 
 	rssFeeds, err := fetchFeed(context.Background(), feed.Url)
 	if err != nil {
-		fmt.Printf("Error trying to fetch the rss feed: %v\n", err)
+		log.Printf("Error trying to fetch the rss feed: %v\n", err)
 		return
 	}
 
 	for _, item := range rssFeeds.Channel.Item {
-		fmt.Printf(" * %s\n", item.Title)
+		t, err := time.Parse(time.RFC1123Z, item.PubDate)
+		validTime := true
+		if err != nil {
+			t = time.Time{}
+			validTime = false
+		}
+
+		pubDate := sql.NullTime {
+			Time: t,
+			Valid: validTime,
+		}
+
+		title := sql.NullString{
+			String: item.Title,
+			Valid: item.Title != "",
+		}
+
+		description := sql.NullString{
+			String: item.Description,
+			Valid: item.Description != "",
+		}
+
+		_ , err = s.db.CreatePost(context.Background(), database.CreatePostParams{
+			ID: uuid.New(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+			Title: title,
+			Url: item.Link,
+			Description: description,
+			PublishedAt: pubDate,
+			FeedID: feed.ID,
+		})	
+		if err != nil {
+			 // Attempt to cast the error to a pq.Error type
+		    	if pqErr, ok := err.(*pq.Error); ok {
+				// Check if the SQLSTATE code indicates a unique violation
+				if pqErr.Code == "23505" {
+			    	// This is a unique constraint violation, ignore it as per assignment
+			    		continue // Skip to the next item in the loop
+				}
+		    	}
+			log.Printf("Error adding a post %v\n", err)
+		}
 	}
 
 	if err = s.db.MarkFeedFetched(context.Background(), feed.ID); err != nil {
-		fmt.Printf("Error trying to mark feed fetched: %v\n", err)
+		log.Printf("Error trying to mark feed fetched: %v\n", err)
 		return
 	}
+
+	log.Printf("Feed %s collected, %v posts found", feed.Name, len(rssFeeds.Channel.Item))
 
 }
